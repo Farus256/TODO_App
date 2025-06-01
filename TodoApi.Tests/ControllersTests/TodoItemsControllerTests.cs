@@ -18,6 +18,11 @@ namespace TodoApi.Tests.ControllersTests
                 .UseInMemoryDatabase(databaseName: dbName)
                 .Options;
             var context = new TodoContext(options);
+
+            // Clear database if already seeded (для повторного використання назви)
+            context.TodoItems.RemoveRange(context.TodoItems);
+            await context.SaveChangesAsync();
+
             // Seed initial data
             context.TodoItems.AddRange(new List<TodoItem>
             {
@@ -31,14 +36,11 @@ namespace TodoApi.Tests.ControllersTests
         [Fact]
         public async Task GetTodoItems_ReturnsAllItems()
         {
-            // Arrange
             var context = await GetInMemoryDbContextAsync("GetAllDb");
             var controller = new TodoItemsController(context);
 
-            // Act
             var result = await controller.GetTodoItems();
 
-            // Assert
             var actionResult = Assert.IsType<ActionResult<IEnumerable<TodoItem>>>(result);
             var items = Assert.IsAssignableFrom<IEnumerable<TodoItem>>(actionResult.Value!);
             Assert.Equal(2, items.Count());
@@ -47,15 +49,12 @@ namespace TodoApi.Tests.ControllersTests
         [Fact]
         public async Task GetTodoItem_ExistingId_ReturnsItem()
         {
-            // Arrange
             var context = await GetInMemoryDbContextAsync("GetByIdDb");
             var existingId = context.TodoItems.First().Id;
             var controller = new TodoItemsController(context);
 
-            // Act
             var actionResult = await controller.GetTodoItem(existingId);
 
-            // Assert
             var resultValue = Assert.IsType<TodoItem>(actionResult.Value!);
             Assert.Equal(existingId, resultValue.Id);
         }
@@ -63,21 +62,17 @@ namespace TodoApi.Tests.ControllersTests
         [Fact]
         public async Task GetTodoItem_NonExistingId_ReturnsNotFound()
         {
-            // Arrange
             var context = await GetInMemoryDbContextAsync("GetByIdDb2");
             var controller = new TodoItemsController(context);
 
-            // Act
             var actionResult = await controller.GetTodoItem(999);
 
-            // Assert
             Assert.IsType<NotFoundResult>(actionResult.Result);
         }
 
         [Fact]
         public async Task CreateTodoItem_ValidItem_ReturnsCreatedItem()
         {
-            // Arrange
             var options = new DbContextOptionsBuilder<TodoContext>()
                 .UseInMemoryDatabase(databaseName: "CreateDb")
                 .Options;
@@ -90,10 +85,8 @@ namespace TodoApi.Tests.ControllersTests
                 IsCompleted = false
             };
 
-            // Act
             var actionResult = await controller.CreateTodoItem(newItem);
 
-            // Assert
             var createdAtAction = Assert.IsType<CreatedAtActionResult>(actionResult.Result);
             var item = Assert.IsType<TodoItem>(createdAtAction.Value!);
             Assert.Equal("NewTask", item.Title);
@@ -103,7 +96,6 @@ namespace TodoApi.Tests.ControllersTests
         [Fact]
         public async Task UpdateTodoItem_ValidUpdate_NoContentReturned()
         {
-            // Arrange
             var context = await GetInMemoryDbContextAsync("UpdateDb");
             var existing = context.TodoItems.First();
             var controller = new TodoItemsController(context);
@@ -116,10 +108,8 @@ namespace TodoApi.Tests.ControllersTests
                 IsCompleted = true
             };
 
-            // Act
             var result = await controller.UpdateTodoItem(existing.Id, updated);
 
-            // Assert
             Assert.IsType<NoContentResult>(result);
             var fromDb = await context.TodoItems.FindAsync(existing.Id);
             Assert.Equal("UpdatedTitle", fromDb.Title);
@@ -129,15 +119,12 @@ namespace TodoApi.Tests.ControllersTests
         [Fact]
         public async Task UpdateTodoItem_MismatchedId_BadRequest()
         {
-            // Arrange
             var context = await GetInMemoryDbContextAsync("UpdateDb2");
             var controller = new TodoItemsController(context);
             var updated = new TodoItem { Id = 999, Title = "X", Description = "Y", IsCompleted = false };
 
-            // Act
             var result = await controller.UpdateTodoItem(1, updated);
 
-            // Assert
             var badRequest = Assert.IsType<BadRequestObjectResult>(result);
             Assert.Equal("ID in URL does not match ID in body.", badRequest.Value);
         }
@@ -155,20 +142,20 @@ namespace TodoApi.Tests.ControllersTests
 
             // Assert
             Assert.IsType<NoContentResult>(result);
-            Assert.Empty(context.TodoItems);
+
+            // Проверяем, что удалённый элемент отсутствует, а другой остался
+            Assert.DoesNotContain(context.TodoItems, t => t.Id == existing.Id);
+            Assert.Single(context.TodoItems);
         }
 
         [Fact]
         public async Task DeleteTodoItem_NonExistingId_NotFoundReturned()
         {
-            // Arrange
             var context = await GetInMemoryDbContextAsync("DeleteDb2");
             var controller = new TodoItemsController(context);
 
-            // Act
             var result = await controller.DeleteTodoItem(999);
 
-            // Assert
             Assert.IsType<NotFoundResult>(result);
         }
     }
